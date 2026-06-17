@@ -30,18 +30,26 @@ REFERENCE_DATASETS = {
         WHALE_DIR,
         [
             "signal_66582.h5",
+            "signal_1131.h5",   # weak
+            "signal_2125.h5",   # REALLY weak
         ],
     ),
     "earthquake": (
         EARTHQUAKE_DIR,
         [
             "ci39007775.h5",
+            "ci38971232.h5",
+            "nn00832186-1.h5",  # weird
+
         ],
     ),
     "noise": (
         NOISE_DIR,
         [
             "ci39812319-2.h5",
+            "ci39281440.h5",    # coherent
+            "ci38538991.h5",
+
         ],
     ),
 }
@@ -179,7 +187,7 @@ def load_h5_data(filepath):
 def bandpass(data, lowcut, highcut, fs=100.0, order=4):
     sos = butter(order, [lowcut, highcut], btype="band", fs=fs, output="sos")
     return sosfiltfilt(sos, data, axis=1)
-
+# 
 
 def save_das_png(data, output_file):
     vmax = np.percentile(np.abs(data), 99)
