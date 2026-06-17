@@ -6,96 +6,256 @@ import pandas as pd
 
 from openai import OpenAI
 
+
+# ==== config ====
 load_dotenv()
+
 API_KEY = os.getenv("OPENAI_API_KEY")
-IMAGE_DIR = "../image-data"
-OUTPUT_CSV = "labels.csv"
 MODEL = "gpt-4o"
+
+MODEL = "gpt-4o"
+
+PROJECT_ROOT = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..")
+)
+
+REFERENCE_DIR = os.path.join(
+    PROJECT_ROOT,
+    "reference_set",
+    "pngs"
+)
+
+TEST_DIR = os.path.join(
+    PROJECT_ROOT,
+    "test_set",
+    "pngs"
+)
+
+TEST_LABELS = os.path.join(
+    PROJECT_ROOT,
+    "test_set",
+    "test_set_labels.csv"
+)
+
+OUTPUT_CSV = os.path.join(
+    PROJECT_ROOT,
+    "predictions.csv"
+)
 
 client = OpenAI(api_key=API_KEY)
 
+
+
+# === prompt === 
+
+PROMPT = """
+You are classifying DAS images.
+
+There are three classes:
+
+EARTHQUAKE
+- Coherent signal across many channels
+- Vertical or near-vertical arrivals
+- Large spatial extent
+
+WHALE
+- Curved or hyperbolic moveout
+- Localized in channel space
+- Smooth coherent structure
+
+NOISE
+- No coherent moveout
+- Random patterns
+- Horizontal artifacts
+- Instrument glitches
+
+You will first see labeled reference examples.
+
+Then you will see one unlabeled image.
+
+Return ONLY one word:
+
+EARTHQUAKE
+WHALE
+NOISE
+"""
+
+
+# ==== helper functions ====
+
 def encode_image(path):
     with open(path, "rb") as f:
-        return base64.b64encode(f.read()).decode("utf-8")
-    
+        return base64.b64encode(
+            f.read()
+        ).decode("utf-8")
 
-PROMPT = """You are an expert analyst classifying Distributed Acoustic Sensing (DAS) array plots.
-The plot shows normalized strain amplitude across fiber channels (y-axis) over time (x-axis).
 
-Return ONLY one word: EARTHQUAKE, WHALE, or NOISE
+def load_reference_examples():
+    refs = []
 
---- SIGNAL SIGNATURES ---
+    for fname in sorted(os.listdir(REFERENCE_DIR)):
+        if not fname.endswith(".png"):
+            continue
 
-EARTHQUAKE:
-- Sudden onset: energy appears simultaneously or near-simultaneously across MANY channels at once
-- Vertical or near-vertical wavefront at onset (fast propagation)
-- Followed by coda: sustained, decaying energy after the initial arrival
-- May show multiple wave phases (P, S) arriving at slightly different times
-- Energy is broadband and affects large channel ranges (hundreds of channels)
-- Example: a dark vertical band that fans out and decays
+        label = fname.split("_")[0].upper()
 
-WHALE:
-- Localized in channel space: affects a limited range of channels, not the whole array
-- Hyperbolic or curved moveout: signal arrives at different times on different channels,
-  forming a curved or diagonal streak (not vertical)
-- May show a fan shape with an apex (closest point of approach) and trailing tail
-- Energy is relatively narrow-band and smooth, not impulsive
-- Signal drifts slowly across channels over many seconds
-- Example: a curved smear or diagonal slash confined to a channel sub-range
+        refs.append(
+            {
+                "label": label,
+                "path": os.path.join(
+                    REFERENCE_DIR,
+                    fname
+                )
+            }
+        )
 
-NOISE:
-- No coherent onset across multiple channels
-- Purely horizontal streaks: single bad channels with constant noise (cable artifact)
-- Random speckle with no spatial or temporal coherence
-- Signals confined to 1-2 channels only
-- Rectangular blocks of uniform amplitude: data gaps or instrument glitches
+    return refs
 
---- DECISION RULES ---
-1. Is there a sudden vertical onset across hundreds of channels? → EARTHQUAKE
-2. Is there a curved/hyperbolic moveout confined to a channel subrange? → WHALE
-3. Is the pattern diagonal streaks, horizontal lines, random speckle, or data blocks? → NOISE
-4. If ambiguous between WHALE and NOISE: does it have any curved moveout structure? Yes → WHALE
-5. If ambiguous between EARTHQUAKE and NOISE: does it affect many channels at once? Yes → EARTHQUAKE
 
-Return only: EARTHQUAKE, WHALE, or NOISE"""
+def build_messages(test_image_path):
+    '''
+    creates the message to be fed into the LLM (prompt + 1 example of each signal type, with the label)
+    '''
+    content = [
+        {
+            "type": "text",
+            "text": PROMPT,
+        }
+    ]
 
-def label_image(image_path):
-    image_base64 = encode_image(image_path)
+    references = load_reference_examples()
+
+    for ref in references:         # add one per each example type
+        content.append(
+            {
+                "type": "text",
+                "text": f"REFERENCE EXAMPLE ({ref['label']})"
+            }
+        )
+
+        content.append(
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url":
+                    f"data:image/png;base64,{encode_image(ref['path'])}"
+                }
+            }
+        )
+
+    content.append(
+        {
+            "type": "text",
+            "text":
+            "Classify the following image. Return only EARTHQUAKE, WHALE, or NOISE."
+        }
+    )
+
+    content.append(
+        {
+            "type": "image_url",
+            "image_url": {
+                "url":
+                f"data:image/png;base64,{encode_image(test_image_path)}"
+            }
+        }
+    )
+
+    return [
+        {
+            "role": "user",
+            "content": content,
+        }
+    ]
+
+
+def classify_image(image_path):
     response = client.chat.completions.create(
         model=MODEL,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": PROMPT},
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/png;base64,{image_base64}"},
-                    },
-                ],
-            }
-        ],
+        messages=build_messages(image_path),
         temperature=0,
-        max_tokens=10,
+        max_tokens=5,
     )
-    return response.choices[0].message.content.strip().upper()
 
+    return (
+        response
+        .choices[0]
+        .message
+        .content
+        .strip()
+        .upper()
+    )
+
+
+# ======== MAIN ========
 def main():
-    results = []
-    files = [f for f in os.listdir(IMAGE_DIR) if f.endswith(".png")]
-    print(f"Found {len(files)} images")
-    for fname in files:
-        fpath = os.path.join(IMAGE_DIR, fname)
-        try:
-            label = label_image(fpath)
-            print(f"{fname} → {label}")
-            results.append({"file": fname, "label": label})
-        except Exception as e:
-            print(f"Error on {fname}: {e}")
+    gt_df = pd.read_csv(TEST_LABELS)
 
-    df = pd.DataFrame(results)
-    df.to_csv(OUTPUT_CSV, index=False)
-    print(f"\nSaved labels to {OUTPUT_CSV}")
+    results = []
+    files = sorted(
+        [
+            f
+            for f in os.listdir(TEST_DIR)
+            if f.endswith(".png")
+        ]
+    )
+
+    print(f"Testing {len(files)} images")
+
+    for fname in files:
+        image_path = os.path.join(
+            TEST_DIR,
+            fname
+        )
+
+        try:
+            prediction = classify_image(
+                image_path
+            )
+
+            truth = gt_df.loc[
+                gt_df["file"] == fname,
+                "label"
+            ].values[0]
+
+            print(
+                f"{fname} -> {prediction} (GT={truth})"
+            )
+
+            results.append(
+                {
+                    "file": fname,
+                    "prediction": prediction,
+                    "ground_truth": truth,
+                }
+            )
+
+        except Exception as e:
+
+            print(
+                f"ERROR: {fname}: {e}"
+            )
+
+    results_df = pd.DataFrame(results)
+
+    accuracy = (
+        results_df["prediction"]
+        ==
+        results_df["ground_truth"]
+    ).mean()
+
+    print("\n===================")
+    print(f"Accuracy: {accuracy:.3f}")
+    print("===================\n")
+
+    results_df.to_csv(
+        OUTPUT_CSV,
+        index=False
+    )
+
+    print(
+        f"Saved predictions to {OUTPUT_CSV}"
+    )
 
 if __name__ == "__main__":
     main()
