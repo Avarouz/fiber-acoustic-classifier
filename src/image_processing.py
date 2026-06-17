@@ -24,40 +24,63 @@ EARTHQUAKE_DIR = "../data/eq_data/das_data/earthquakes"
 NOISE_DIR = "../data/eq_data/das_data/noise_data"
 
 
-# == testing set , manually chosen ==
-
-TEST_WHALES = [
-    "signal_66582.h5",
-    "signal_7402.h5",
-    "signal_9660.h5",
-    "signal_38865.h5",
-    "signal_16446.h5",
-]
-
-TEST_EARTHQUAKES = [
-    "ci39227895.h5",
-    "ci38628799.h5",
-    "ci38538991.h5",
-    "ci39007775.h5",
-    "ci38242914.h5",
-]
-
-TEST_NOISE = [
-    "ci39812319-2.h5",
-    "ci38529591.h5",
-    "nn00831033.h5",
-    "NCSN73972711.0.h5",
-    "NCSN73774300.0.h5",
-]
-
-
-DATASETS = {
-    "whale": (WHALE_DIR, TEST_WHALES),
-    "earthquake": (EARTHQUAKE_DIR, TEST_EARTHQUAKES),
-    "noise": (NOISE_DIR, TEST_NOISE),
+# ==== reference set =====
+REFERENCE_DATASETS = {
+    "whale": (
+        WHALE_DIR,
+        [
+            "signal_66582.h5",
+        ],
+    ),
+    "earthquake": (
+        EARTHQUAKE_DIR,
+        [
+            "ci39007775.h5",
+        ],
+    ),
+    "noise": (
+        NOISE_DIR,
+        [
+            "ci39812319-2.h5",
+        ],
+    ),
 }
 
-# === helpers ===
+
+# == testing set , manually chosen ==
+
+TEST_DATASETS = {
+    "whale": (
+        WHALE_DIR,
+        [
+            "signal_7402.h5",
+            "signal_9660.h5",
+            "signal_38865.h5",
+            "signal_16446.h5",
+        ],
+    ),
+    "earthquake": (
+        EARTHQUAKE_DIR,
+        [
+            "ci38628799.h5",
+            "ci38538991.h5",
+            "ci39227895.h5",
+            "ci38242914.h5",
+        ],
+    ),
+    "noise": (
+        NOISE_DIR,
+        [
+            "ci38529591.h5",
+            "nn00831033.h5",
+            "NCSN73972711.0.h5",
+            "NCSN73774300.0.h5",
+        ],
+    ),
+}
+
+
+# ====== helpers ======
 def find_first_dataset(group):
     """
     Recursively find the first dataset in an HDF5 file/group.
@@ -75,6 +98,7 @@ def find_first_dataset(group):
             if result is not None:
                 return result
     return None
+
 
 def load_h5_data(filepath):
     with h5py.File(filepath, "r") as f:
@@ -121,8 +145,7 @@ def save_das_png(data, output_file):
     plt.close()
 
 
-
-def generate_png(filepath, label):
+def generate_png(filepath, label, png_dir):
     data = load_h5_data(filepath)
 
     if data.ndim == 1:
@@ -142,7 +165,7 @@ def generate_png(filepath, label):
         data,
         lowcut=lowcut,
         highcut=highcut,
-        fs=100.0
+        fs=100.0,
     )
 
     base = os.path.splitext(
@@ -150,60 +173,98 @@ def generate_png(filepath, label):
     )[0]
 
     png_file = os.path.join(
-        PNG_DIR,
+        png_dir,
         f"{label}_{base}.png"
     )
 
-    save_das_png(data, png_file)
+    save_das_png(
+        data,
+        png_file
+    )
 
     print(f"[PNG] {png_file}")
 
 
-# ==== main =====
-rows = []
 
-for label, (source_dir, file_list) in DATASETS.items():
-    for fname in file_list:
-        filepath = os.path.join(
-            source_dir,
-            fname
-        )
+def build_dataset(dataset_name, datasets):
 
-        if not os.path.exists(filepath):
-            print(f"[MISSING] {filepath}")
-            continue
+    output_dir = os.path.join(
+        PROJECT_ROOT,
+        dataset_name
+    )
 
-        try:
-            generate_png(
-                filepath,
-                label
+    png_dir = os.path.join(
+        output_dir,
+        "pngs"
+    )
+
+    os.makedirs(
+        png_dir,
+        exist_ok=True
+    )
+
+    rows = []
+
+    for label, (source_dir, file_list) in datasets.items():
+        for fname in file_list:
+            filepath = os.path.join(
+                source_dir,
+                fname
             )
 
-            rows.append(
-                {
-                    "file": fname,
-                    "label": label.upper(),
-                }
-            )
+            if not os.path.exists(filepath):
+                print(
+                    f"[MISSING] {filepath}"
+                )
 
-        except Exception as e:
-            print(
-                f"[ERROR] {fname}: {e}"
-            )
+                continue
+
+            try:
+                generate_png(
+                    filepath,
+                    label,
+                    png_dir
+                )
+
+                rows.append(
+                    {
+                        "file": f"{label}_{os.path.splitext(fname)[0]}.png",
+                        "label": label.upper(),
+                    }
+                )
+
+            except Exception as e:
+
+                print(
+                    f"[ERROR] {fname}: {e}"
+                )
+
+    # === save labels into csv ====
+    labels_csv = os.path.join(
+        output_dir,
+        f"{dataset_name}_labels.csv"
+    )
+
+    pd.DataFrame(rows).to_csv(
+        labels_csv,
+        index=False
+    )
+
+    print(
+        f"\nSaved labels: {labels_csv}"
+    )
 
 
-# == saving labels into csv
-labels_csv = os.path.join(
-    OUTPUT_DIR,
-    "test_labels.csv"
-)
 
-pd.DataFrame(rows).to_csv(
-    labels_csv,
-    index=False
-)
+# ======= MAIN =======
+if __name__ == "__main__":
 
-print("\n=========================")
-print(f"Generated {len(rows)} PNGs")
-print(f"Saved labels: {labels_csv}")
-print("=========================")
+    build_dataset(
+        "reference_set",
+        REFERENCE_DATASETS
+    )
+
+    build_dataset(
+        "test_set",
+        TEST_DATASETS
+    )
