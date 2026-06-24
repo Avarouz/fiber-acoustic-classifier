@@ -21,20 +21,20 @@ PROJECT_ROOT = os.path.abspath(
 
 REFERENCE_DIR = os.path.join(
     PROJECT_ROOT,
-    "reference_set",
+    "test_fixed",
     "pngs"
 )
 
 TEST_DIR = os.path.join(
     PROJECT_ROOT,
-    "test_set",
+    "test_set",     # change this for different testing sets
     "pngs"
 )
 
 TEST_LABELS = os.path.join(
     PROJECT_ROOT,
-    "test_set",
-    "test_set_labels.csv"
+    "test_fixed",     # also here !
+    "test_fixed_labels.csv"       
 )
 
 OUTPUT_CSV = os.path.join(
