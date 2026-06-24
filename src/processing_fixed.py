@@ -78,7 +78,6 @@ def find_first_dataset(group):
 
 
 def load_h5_data(filepath):
-
     with h5py.File(filepath, "r") as f:
 
         if "data" in f:

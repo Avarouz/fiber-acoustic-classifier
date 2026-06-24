@@ -13,21 +13,19 @@ load_dotenv()
 API_KEY = os.getenv("OPENAI_API_KEY")
 MODEL = "gpt-4o"
 
-MODEL = "gpt-4o"
-
 PROJECT_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..")
 )
 
 REFERENCE_DIR = os.path.join(
     PROJECT_ROOT,
-    "test_fixed",
+    "reference_set",
     "pngs"
 )
 
 TEST_DIR = os.path.join(
     PROJECT_ROOT,
-    "test_set",     # change this for different testing sets
+    "test_fixed",     # change this for different testing sets
     "pngs"
 )
 
