@@ -25,7 +25,8 @@ data/
 # === Outputs ===
 figures/
 outputs/
-*.png
+test_fixed/
+test_set/
 *.pdf
 
 # === IDE ===
