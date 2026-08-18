@@ -19,13 +19,13 @@ env/
 *.h5
 *.hdf5
 *.dat
-*.csv
+test_set_labels.csv
+predictions.csv
 data/
 
 # === Outputs ===
 figures/
 outputs/
-test_fixed/
 test_set/
 *.pdf
 
